@@ -25,39 +25,45 @@ test_loader = torch.utils.data.DataLoader(
 class Model(nn.Module):
     def __init__(self, cuda):
         super(Model, self).__init__()
-        # 定义卷积层
-        self.conv1 = torch.nn.Conv2d(in_channels=1, out_channels=6, kernel_size=5)
-        self.conv2 = torch.nn.Conv2d(in_channels=6, out_channels=12, kernel_size=5)
-        # 定义全连接层
-        self.fc1 = torch.nn.Linear(in_features=12*4*4, out_features=120)
-        self.fc2 = torch.nn.Linear(in_features=120, out_features=60)
-        self.fc3 = torch.nn.Linear(in_features=60, out_features=10)  # 10是固定的，因为必须要和模型所需要的分类个数一致
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=64, kernel_size=1, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1)
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.bn1 = nn.BatchNorm2d(num_features=64)
+        self.relu1 = nn.ReLU()
+        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1)
+        self.conv4 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, padding=1)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        self.bn2 = nn.BatchNorm2d(num_features=128)
+        self.relu2 = nn.ReLU()
+        self.fc5 = nn.Linear(in_features=128 * 8 * 8, out_features=512)
+        self.drop1 = nn.Dropout()
+        self.fc6 = nn.Linear(in_features=512, out_features=10)
         self.use_cuda = cuda
         self.cuda()
 
-    def forward(self, t):
-        # 第一层卷积和池化处理
-        t = self.conv1(t)
-        t = F.relu(t)
-        t = F.max_pool2d(t, kernel_size=2, stride=2)
-        # 第二层卷积和池化处理
-        t = self.conv2(t)
-        t = F.relu(t)
-        t = F.max_pool2d(t, kernel_size=2, stride=2)
-        # 搭建全连接网络，第一层全连接
-        t = t.reshape(-1, 12 * 4 * 4)  # 将卷积结果由4维变为2维
-        t = self.fc1(t)
-        t = F.relu(t)
-        # 第二层全连接
-        t = self.fc2(t)
-        t = F.relu(t)
-        # 第三层全连接
-        t = self.fc3(t)
-        return F.log_softmax(t, dim=1)
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.pool1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.pool2(x)
+        x = self.bn2(x)
+        x = self.relu2(x)
+
+        x = x.view(-1, 128 * 8 * 8)
+        x = F.relu(self.fc5(x))
+        x = self.drop1(x)
+        x = self.fc6(x)
+
+        return F.log_softmax(x, dim=1)
 
 def train(model, train_loader, epochs):
         model.train()
-        optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+        optimizer = optim.SGD(model.parameters(), lr=0.005, momentum=0.9)
         for epoch in range(epochs):
             timestart = time.time()  # 希望全数据被训练几次
             for batch_idx, (data, target) in enumerate(train_loader):
